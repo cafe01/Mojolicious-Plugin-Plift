@@ -1,0 +1,11 @@
+Revision history for Perl extension Mojolicious-Plugin-Plift
+
+{{$NEXT}}
+
+    * Initial commit, features:
+      - add the 'plift' handler
+      - add the 'plift' helper, returns a reference to the Plift singleton
+      - special template meta key 'meta.layout' copied to stash 'layout' key
+      - can set options via Plugin config or stash key
+      - custom element: <x-link to="...">
+      - custom element: <x-csrf-field />
