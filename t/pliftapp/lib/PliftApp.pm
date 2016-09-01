@@ -45,22 +45,16 @@ BEGIN {
     package PliftApp::Snippet::Foo;
     use Moo;
 
-    has 'context', is => 'ro';
-
     sub process {
-        my ($self, $element) = @_;
-        $element->text(ref $self->context->app);
+        my ($self, $element, $c) = @_;
+        $element->text(ref $c->app);
     }
 
     package PliftApp::Snippet::CustomResponse;
     use Moo;
 
-    has 'context', is => 'ro';
-
     sub process {
-        my ($self, $element) = @_;
-
-        my $c = $self->context;
+        my ($self, $element, $c) = @_;
 
         $c->res->code(402);
         $c->res->body('CustomResponse');

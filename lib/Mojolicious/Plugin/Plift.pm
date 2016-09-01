@@ -23,15 +23,6 @@ sub register {
 }
 
 
-sub snippet_namespaces {
-    my ($self, $c) = @_;
-
-    $c->stash->{'plift.snippet_namespaces'}
-        || $self->config->{'snippet_namespaces'}
-        || [(ref $c->app).'::Snippet'];
-}
-
-
 sub _render {
     my ( $self, $renderer, $c, $output, $options ) = @_;
 
@@ -49,6 +40,11 @@ sub _render {
     return unless defined $template;
     return if ref $template && !defined $$template;
 
+    # snippet_namespaces
+    my $snippet_namespaces = $c->stash->{'plift.snippet_namespaces'}
+        || $self->config->{'snippet_namespaces'}
+        || [(ref $c->app).'::Snippet'];
+
     # resolve data
     my $stash = $c->stash;
     my $data_key = $stash->{'plift.data_key'} || $self->config->{data_key};
@@ -59,12 +55,12 @@ sub _render {
         paths    => $renderer->paths,
         helper   => $c,
         data     => $data,
-        snippet_namespaces => $self->snippet_namespaces($c)
+        snippet_namespaces => $snippet_namespaces
     });
 
-    # metadata
+    # delete 'layout' metadata set by previous (e.g. inner content) template
     my $metadata = $plift_tpl->metadata;
-    delete $metadata->{layout}; # special key
+    delete $metadata->{layout};
 
     # render
     my $document = $plift_tpl->render;
@@ -150,13 +146,150 @@ Mojolicious::Plugin::Plift - Plift ♥ Mojolicious
 
 =head1 SYNOPSIS
 
-    use Mojolicious::Lite;
+package PliftApp;
 
-    plugin 'Plift';
+    use Mojo::Base 'Mojolicious';
+
+    sub startup {
+        my $app = shift;
+
+        $app->plugin('Plift');
+        # $app->renderer->default_handler('plift');
+
+        my $r = $app->routes;
+        $r->get('/' => { template => 'index', handler => 'plift' });
+
+        ...
+    }
+
+    1;
 
 =head1 DESCRIPTION
 
-Mojolicious::Plugin::Plift is ...
+Plugs L<Plift> to Mojolicious.
+
+=head1 WHAT IS PLIFT?
+
+Out of the box, L<Plift> looks like yet another "designer friendly" HTML
+templating engine. It does all common templating stuff like interpolating data
+into placeholders, including other templates (e.g. header, footer) wrapping a
+template with another (e.g. site layout), etc...
+
+But Plift is more than that. It supports the "View First" approach to web page
+development, via L</SNIPPETS>. And allows the development of reusable custom
+HTML elements, see L</"CUSTOM ELEMENTS">.
+
+=head1 VIEW FIRST
+
+Plift was inspired by the template system provided by L<Lift|http://liftweb.net/>
+(hence the name), a web framework for the Scala programming language.
+They apply a concept called "View-First", which differs from the traditional
+"Controller-First" concept popularized by the MVC frameworks.
+
+On the "Controller-First" approach, the Controller is executed first, and is
+responsible for pulling data from the "Model", then making this data available
+to the "View". This creates a tight coupling between the controller and the
+final rendered webpage, since it needs to know and gather all data possibly
+need by the webpage templates. Thats perfect for well defined webapp actions,
+but not so perfect for creating reusable website components.
+
+On the other hand, a "View-First" framework starts by parsing the view, then
+executing small, well-defined pieces of code triggered by special html attributes
+found in the template itself. These code snippets are responsible for rendering
+dynamic data using the html element (that triggered it) as the data template.
+
+The next section describes how to work with snippets in L<Plift>.
+
+=head2 SNIPPETS
+
+Snippets are trigerred from html elements via the C<data-snippet> attribute:
+
+    <div data-snippet="say_hello"></div>
+
+Which will map the string C<say_hello> to a snippet class. The mapping is made
+by camelizing the string and concatenating to the class namespaces supplied in
+the L</snippet_namespaces> config. The default namespace is
+C<< <MojocliousAppClass>::Snippet >>. For the C<say_hello> snippet, on a app
+named 'MyApp', you would have to define the C<MyApp::Snippet::SayHello> class.
+
+    package MyApp::Snippet::SayHello;
+
+    sub process {
+        my ($self, $element) = @_;
+        $element->text('Hello, stranger.')
+    }
+
+As you can see, the C<process> method is called by default, and a reference to
+the element that triggered the snippet is passed as the first argument. The
+element is an instance of L<XML::LibXML::jQuery>. The output of this example is:
+
+    <div>Hello, stranger.</div>
+
+=head3 The context object
+
+Ok.. nice.. but you obviously need access to the rest of your app in order to
+get usefull information. This is done via the context object that is
+passed as the second argument. This object is an instace of C<Plift::Context>
+that AUTOLOADs methods from a supplied 'helper' object, which in our case is
+the L<controller|Mojolicious::Controller> that called L<Mojolicious::Controller/render>.
+
+    sub process {
+        my ($self, $element, $c) = @_;
+        my $name = $c->stash->{name} || 'stranger';
+
+        # Or call methods directly on the controller, needed when
+        # calling methods that are also AUTOLOADed from the controller
+        # instance:
+        #
+        # $c->helper->csrf_token
+
+        $element->text("Hello, $name.")
+    }
+
+You can also pass parameters to the snippet via URI query string syntax.
+
+    <div data-snippet="say_hello?name=Cafe"></div>
+
+Parameters are then received as the third argument on the snippet method.
+
+    sub process {
+        my ($self, $element, $c, $params) = @_;
+        my $name = $params->{name} || 'stranger';
+        $element->text("Hello, $name.")
+    }
+
+Finnaly, you can add multiple actions on a single snippet class, then specify
+which action to call in the C<data-snippet> attribute.
+
+Lets create a more generic snippet, called "Say", which can not only say 'hello'
+but can also say 'goodbye'. Amazing, uh?
+
+    package MyApp::Snippet::Say;
+
+    sub hello {
+        my ($self, $element, $c, $params) = @_;
+        $element->text("Hello, $params->{name}!")
+    }
+
+    sub goodbye {
+        my ($self, $element, $c, $params) = @_;
+        $element->text("Goodbye, $params->{name}!")
+    }
+
+Now you can specify the 'hello' or 'goodbye' action in the data-snippet attribute.
+
+    <div data-snippet="say/hello?name=Cafe"></div>
+    <div data-snippet="say/goodbye?name=Cafe"></div>
+
+Outputs:
+
+    <div>Hello, Cafe!</div>
+    <div>Goodbye, Cafe!</div>
+
+Note that specifying only C< data-snippet="say" > (without the "/<action>" part)
+will throw an exception, since we haven't defined the default C<process> method.
+
+=head2 CUSTOM ELEMENTS
 
 =head1 LICENSE
 
