@@ -4,7 +4,6 @@ use Test::More 0.98;
 use FindBin;
 use lib "$FindBin::Bin/pliftapp/lib";
 use Test::Mojo;
-use Data::Printer;
 use XML::LibXML::jQuery;
 
 # Load application class

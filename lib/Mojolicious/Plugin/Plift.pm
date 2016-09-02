@@ -209,10 +209,11 @@ Snippets are trigerred from html elements via the C<data-snippet> attribute:
 Which will map the string C<say_hello> to a snippet class. The mapping is made
 by camelizing the string and concatenating to the class namespaces supplied in
 the L</snippet_namespaces> config. The default namespace is
-C<< <MojocliousAppClass>::Snippet >>. For the C<say_hello> snippet, on a app
+C<< <MojocliousAppClass>::Snippet >>. For the C<say_hello> snippet on a app
 named 'MyApp', you would have to define the C<MyApp::Snippet::SayHello> class.
 
     package MyApp::Snippet::SayHello;
+    use Mojo::Base -base;
 
     sub process {
         my ($self, $element) = @_;
@@ -228,7 +229,7 @@ element is an instance of L<XML::LibXML::jQuery>. The output of this example is:
 =head3 The context object
 
 Ok.. nice.. but you obviously need access to the rest of your app in order to
-get usefull information. This is done via the context object that is
+get useful information. This is done via the context object that is
 passed as the second argument. This object is an instace of C<Plift::Context>
 that AUTOLOADs methods from a supplied 'helper' object, which in our case is
 the L<controller|Mojolicious::Controller> that called L<Mojolicious::Controller/render>.
@@ -246,11 +247,14 @@ the L<controller|Mojolicious::Controller> that called L<Mojolicious::Controller/
         $element->text("Hello, $name.")
     }
 
-You can also pass parameters to the snippet via URI query string syntax.
+
+=head3 Parameters
+
+You can pass parameters to the snippet via URI query string syntax.
 
     <div data-snippet="say_hello?name=Cafe"></div>
 
-Parameters are then received as the third argument on the snippet method.
+Parameters are passed as the third argument to the snippet method.
 
     sub process {
         my ($self, $element, $c, $params) = @_;
@@ -258,13 +262,17 @@ Parameters are then received as the third argument on the snippet method.
         $element->text("Hello, $name.")
     }
 
-Finnaly, you can add multiple actions on a single snippet class, then specify
+
+=head3 Actions
+
+Finally, you can add multiple actions in a single snippet class, and specify
 which action to call in the C<data-snippet> attribute.
 
-Lets create a more generic snippet, called "Say", which can not only say 'hello'
-but can also say 'goodbye'. Amazing, uh?
+Lets create a more generic snippet called C<MyApp::Snippet::Say>, which can not
+only say 'hello' but can also say 'goodbye'. Amazing, uh?
 
     package MyApp::Snippet::Say;
+    use Mojo::Base -base;
 
     sub hello {
         my ($self, $element, $c, $params) = @_;
@@ -286,8 +294,58 @@ Outputs:
     <div>Hello, Cafe!</div>
     <div>Goodbye, Cafe!</div>
 
-Note that specifying only C< data-snippet="say" > (without the "/<action>" part)
-will throw an exception, since we haven't defined the default C<process> method.
+Note that specifying only C<data-snippet="say"> (without the "/<action>" part)
+will throw an exception, since we haven't defined the default C<process> method
+on C<MyApp::Snippet::Say>.
+
+
+=head3 Parameters and new()
+
+The parameters specified in the query string part of the C<data-snippet>
+attribute is also supplied as constructor parameter for the snippet instance.
+The C<MyApp::Snippet::Say> snippet could be written as:
+
+    package MyApp::Snippet::Say;
+    use Mojo::Base -base;
+
+    has 'name';
+
+    sub hello {
+        my ($self, $element) = @_;
+        $element->text(sprintf "Hello, %s!", $self->name);
+    }
+
+    sub goodbye {
+        my ($self, $element) = @_;
+        $element->text(sprintf "Goodbye, %s!", $self->name);
+    }
+
+=head3 Render using directives
+
+In all examples up until now we have been rendering data by manipulating the
+C<$element> object directly (e.g. calling L<XML::LibXML::jQuery/text>). While
+this is ok, thats a simple and repetitive task that can quickly become tedious.
+
+A better approach is to use L<Plift> renderer directives. You do that via the
+context object's methods L<Plift::Context/set> and L<Plift::Context/at>.
+
+Let's rewrite the C<hello()> method using render directives:
+
+    sub hello {
+        my ($self, $element, $c, $params) = @_;
+        my $selector = $c->selector_for($element);
+
+        $c->set( greeting => "Hello, $params->{name}!")
+          ->at( $selector => 'greeting');
+    }
+
+Okay, although for this particular short example the reimplemented method using
+render directives actually has more lines of code, anything more complex than
+that would really benefit of directives capabilities.
+
+For more information on how directives work, see
+L<Plift::Manual::Tutorial/"RENDER DIRECTIVES">.
+
 
 =head2 CUSTOM ELEMENTS
 
