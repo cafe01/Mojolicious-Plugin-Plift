@@ -4,7 +4,7 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Plift;
 use Mojo::Util qw/decode/;
 
-our $VERSION = "0.01";
+our $VERSION = "0.02";
 
 __PACKAGE__->attr([qw/ plift config /]);
 
